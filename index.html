@@ -1,0 +1,106 @@
+<!doctype html>
+<!--
+Copyright 2018 The Go Authors. All rights reserved.
+Use of this source code is governed by a BSD-style
+license that can be found in the LICENSE file.
+-->
+<html>
+
+<head>
+	<meta charset="utf-8">
+	<title>Go wasm</title>
+</head>
+
+<body>
+	<!--
+	Add the following polyfill for Microsoft Edge 17/18 support:
+	<script src="https://cdn.jsdelivr.net/npm/text-encoding@0.7.0/lib/encoding.min.js"></script>
+	(see https://caniuse.com/#feat=textencoder)
+	-->
+	<script src="wasm_exec.js"></script>
+	<script>
+		if (!WebAssembly.instantiateStreaming) { // polyfill
+			WebAssembly.instantiateStreaming = async (resp, importObject) => {
+				const source = await (await resp).arrayBuffer();
+				return await WebAssembly.instantiate(source, importObject);
+			};
+		}
+
+		const go = new Go();
+		let mod, inst;
+		WebAssembly.instantiateStreaming(fetch("main.wasm"), go.importObject).then((result) => {
+			mod = result.module;
+			inst = result.instance;
+			document.getElementById("runButton").disabled = false;
+		}).catch((err) => {
+			console.error(err);
+		});
+
+		async function run() {
+			document.getElementById('custom').style.display = 'block';
+			console.clear();
+			await go.run(inst);
+			inst = await WebAssembly.instantiate(mod, go.importObject); // reset instance
+		}
+
+		// Custom logic
+		let operation = 0;
+		function calculateWrapper() {
+			let a = document.getElementById('a').value;
+			let b = document.getElementById('b').value;
+
+			// Call the `calculate` function from Go!
+			if (operation == "") return
+			// Parse a, b, and operation, because in Go, we are expecting float, float
+			// and int. Parse all to int, it is valid
+			a = parseInt(a, 10);
+			b = parseInt(b, 10);
+			operation = parseInt(operation, 10);
+			// Store the result from Go!
+			const {error, result} = calculate(a, b, operation);
+			// Display it
+			const p = document.getElementById('result');
+			
+			if (error !== null) {
+				p.style.color = 'red';
+				p.innerText = error;
+				return
+			}
+
+			p.style.color = 'black';
+			p.innerText = result;
+		};
+	</script>
+
+	<button onClick="run();" id="runButton" disabled>Run</button>
+	<!-- Custom html -->
+	<hr>
+	<div id="custom" style="display: none;">
+		<input id="a" type="number" value="10">
+		<input id="b" type="number" value="5">
+		<select id="operation">
+			<option value="">--Elige una opción--</option>
+			<option value="1">suma</option>
+			<option value="2">resta</option>
+			<option value="3">multiplicación</option>
+			<option value="4">división</option>
+		</select>
+		<button id="button" onClick="calculateWrapper();" disabled>Calculate</button>
+		<p id="result"></p>
+	</div>
+	<script>
+		document.getElementById('operation').addEventListener('change', event => {
+			// Set the operation to perform
+			operation = event.target.value;
+
+			if (operation === '') {
+				document.getElementById('button').disabled = true;
+				return
+			}
+
+			document.getElementById('button').disabled = false;
+		});
+	</script>
+</body>
+
+</html>

@@ -1,7 +1,10 @@
 package main
 
 import (
-	"errors"
+	"fmt"
+	"io/ioutil"
+	"net/http"
+	"sync"
 	"syscall/js"
 )
 
@@ -14,62 +17,25 @@ func init() {
 }
 
 func main() {
-	global.Set("calculate", js.FuncOf(calculate))
+	global.Set("getData", js.FuncOf(getData))
 
 	select {}
 }
 
-func calculate(_ js.Value, args []js.Value) interface{} {
-	// Here goes the glue code
-	a := args[0].Float()
-	b := args[1].Float()
-	operation := args[2].Int()
+func getData(_ js.Value, args []js.Value) interface{} {
+	var wg sync.WaitGroup
 
-	var result float64
-	var err error
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		r, _ := http.Get("https://rickandmortyapi.com/api/character/")
+		defer r.Body.Close()
 
-	switch operation {
-	case 1:
-		result, err = add(a, b)
-	case 2:
-		result, err = rest(a, b)
-	case 3:
-		result, err = mult(a, b)
-	case 4:
-		result, err = div(a, b)
-	default:
-		err = errors.New("that operation is not known")
-	}
+		characters, _ := ioutil.ReadAll(r.Body)
 
-	if err != nil {
-		return map[string]interface{}{
-			"result": nil,
-			"error":  err.Error(),
-		}
-	}
+		fmt.Println(fmt.Sprintf("%s", characters))
+	}()
+	wg.Wait()
 
-	return map[string]interface{}{
-		"result": result,
-		"error":  nil,
-	}
-}
-
-func add(a, b float64) (float64, error) {
-	return a + b, nil
-}
-
-func rest(a, b float64) (float64, error) {
-	return a - b, nil
-}
-
-func mult(a, b float64) (float64, error) {
-	return a * b, nil
-}
-
-func div(a, b float64) (float64, error) {
-	if b == 0.0 {
-		return 0.0, errors.New("the divider can't be zero")
-	}
-
-	return a / b, nil
+	return nil
 }
